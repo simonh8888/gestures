@@ -1,24 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Hand Gesture Recognition",
-  "version": "1.0",
-  "description": "Chrome extension for recognizing hand gestures using camera.",
-  "permissions": ["scripting", "activeTab", "tabs"],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
-  "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
-    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self';"
-  },
-  "sandbox": {
-    "pages": ["sandbox.html"]
-  },
-  "background": {
-    "service_worker": "background.js"
-  },
+  "name": "Gesture Control",
+  "version": "1.1",
+  "description": "Control Chrome with hand gestures via webcam.",
+  "permissions": ["scripting", "activeTab", "tabs", "videoCapture"],
   "action": {
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "android-chrome-192x192.png",
       "48": "android-chrome-192x192.png",
@@ -30,8 +17,10 @@
     "48": "android-chrome-192x192.png",
     "128": "android-chrome-192x192.png"
   },
-  "web_accessible_resources": [{
-    "resources": ["lib/*"],
-    "matches": ["<all_urls>"]
-  }]
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
 }
