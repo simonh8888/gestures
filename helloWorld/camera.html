@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Hand Gesture Recognition</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+        background-color: #1a1a1a;
+        color: white;
+      }
+      h1 {
+        margin-bottom: 20px;
+      }
+      #videoContainer {
+        position: relative;
+        display: inline-block;
+        margin: 20px auto;
+      }
+      #video {
+        width: 640px;
+        height: 480px;
+        background-color: #000;
+        border-radius: 8px;
+      }
+      #status {
+        margin: 20px auto;
+        padding: 15px;
+        background-color: #2a2a2a;
+        border-radius: 8px;
+        max-width: 640px;
+        font-size: 16px;
+      }
+      button {
+        padding: 12px 24px;
+        font-size: 16px;
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 10px;
+      }
+      button:hover {
+        background-color: #c82333;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hand Gesture Recognition</h1>
+    <div id="videoContainer">
+      <video id="video" autoplay playsinline></video>
+    </div>
+    <div id="status">Initializing camera...</div>
+    <button id="stopCamera">Stop Camera</button>
+
+    <script src="camera.js"></script>
+  </body>
+</html>
