@@ -1,27 +1,65 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Page Controls</title>
+    <title>Gesture Control</title>
     <style>
       body {
         font-family: sans-serif;
         text-align: center;
-        margin: 20px;
+        margin: 10px;
+        width: 320px;
       }
+      h1 {
+        font-size: 18px;
+        margin: 5px 0 10px;
+      }
+      #camera-container {
+        position: relative;
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      #webcam {
+        width: 100%;
+        border-radius: 8px;
+        transform: scaleX(-1);
+      }
+      #gesture-label {
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 255, 0, 0.8);
+        color: black;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      #status {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 10px;
+      }
+      .connected { color: green !important; }
+      .disconnected { color: red !important; }
       button {
         display: block;
         width: 100%;
-        margin: 8px 0;
+        margin: 5px 0;
         padding: 8px;
-        font-size: 16px;
+        font-size: 14px;
       }
     </style>
   </head>
   <body>
-    <h1>Page Controls</h1>
-    <button id="scrollUp">⬆️ Scroll Up</button>
-    <button id="scrollDown">⬇️ Scroll Down</button>
-    <button id="closeTab">❌ Close Tab</button>
+    <h1>Gesture Control</h1>
+
+    <button id="openCamera">Open Camera View</button>
+
+    <hr style="margin: 10px 0; border-color: #ddd;">
+
+    <button id="scrollUp">Scroll Up</button>
+    <button id="scrollDown">Scroll Down</button>
+    <button id="closeTab">Close Tab</button>
 
     <script src="popup.js"></script>
   </body>

@@ -10,6 +10,11 @@ function runInActiveTab(code) {
   });
 }
 
+// Open camera view in new tab
+document.getElementById("openCamera").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("camera.html") });
+});
+
 // Scroll Up
 document.getElementById("scrollUp").addEventListener("click", () => {
   runInActiveTab(() => window.scrollBy(0, -500));

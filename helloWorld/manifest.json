@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Hello World Popup",
-  "version": "1.0",
-  "description": "A simple Chrome extension that says Hello World.",
-  "permissions": ["scripting", "activeTab", "tabs"],
+  "name": "Gesture Control",
+  "version": "1.1",
+  "description": "Control Chrome with hand gestures via webcam.",
+  "permissions": ["scripting", "activeTab", "tabs", "videoCapture"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -16,5 +16,11 @@
     "16": "android-chrome-192x192.png",
     "48": "android-chrome-192x192.png",
     "128": "android-chrome-192x192.png"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
 }
