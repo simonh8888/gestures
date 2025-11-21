@@ -1,27 +1,89 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Page Controls</title>
+    <title>Hand Gesture Recognition</title>
     <style>
       body {
         font-family: sans-serif;
         text-align: center;
-        margin: 20px;
+        margin: 0;
+        padding: 15px;
+        width: 400px;
+        background-color: #1a1a1a;
+        color: white;
+      }
+      h1 {
+        font-size: 18px;
+        margin-bottom: 15px;
+      }
+      #videoContainer {
+        position: relative;
+        width: 100%;
+        margin-bottom: 15px;
+      }
+      #video {
+        width: 100%;
+        height: 300px;
+        background-color: #000;
+        border-radius: 8px;
+        display: none;
+      }
+      #video.active {
+        display: block;
       }
       button {
         display: block;
         width: 100%;
         margin: 8px 0;
+        padding: 10px;
+        font-size: 14px;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      #activateCamera {
+        background-color: #4CAF50;
+      }
+      #activateCamera:hover {
+        background-color: #45a049;
+      }
+      #stopCamera {
+        background-color: #dc3545;
+        display: none;
+      }
+      #stopCamera:hover {
+        background-color: #c82333;
+      }
+      #stopCamera.active {
+        display: block;
+      }
+      #scrollUp, #scrollDown {
+        background-color: #007bff;
+      }
+      #scrollUp:hover, #scrollDown:hover {
+        background-color: #0056b3;
+      }
+      #status {
+        margin: 10px 0;
         padding: 8px;
-        font-size: 16px;
+        background-color: #2a2a2a;
+        border-radius: 4px;
+        font-size: 12px;
+        min-height: 20px;
       }
     </style>
   </head>
   <body>
-    <h1>Page Controls</h1>
+    <h1>Hand Gesture Recognition</h1>
+    <div id="videoContainer">
+      <video id="video" autoplay playsinline></video>
+    </div>
+    <button id="activateCamera">Activate Camera</button>
+    <button id="stopCamera">Stop Camera</button>
+    <div id="status">Click to start</div>
     <button id="scrollUp">⬆️ Scroll Up</button>
     <button id="scrollDown">⬇️ Scroll Down</button>
-    <button id="closeTab">❌ Close Tab</button>
 
     <script src="popup.js"></script>
   </body>

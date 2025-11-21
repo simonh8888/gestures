@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MediaPipe Sandbox</title>
+</head>
+<body>
+  <video id="video" style="display:none;" autoplay playsinline></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script src="lib/hands.js"></script>
+  <script src="lib/camera_utils.js"></script>
+  <script src="lib/drawing_utils.js"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const canvasCtx = canvas.getContext('2d');
+    let hands = null;
+    let camera = null;
+
+    // Listen for messages from parent
+    window.addEventListener('message', async (event) => {
+      const { type, data } = event.data;
+
+      if (type === 'INIT_MEDIAPIPE') {
+        try {
+          // Initialize MediaPipe Hands
+          hands = new Hands({
+            locateFile: (file) => {
+              return `lib/${file}`;
+            }
+          });
+
+          hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+          });
+
+          hands.onResults((results) => {
+            // Send results back to parent
+            window.parent.postMessage({
+              type: 'MEDIAPIPE_RESULTS',
+              results: {
+                multiHandLandmarks: results.multiHandLandmarks
+              }
+            }, '*');
+          });
+
+          window.parent.postMessage({ type: 'MEDIAPIPE_READY' }, '*');
+        } catch (error) {
+          window.parent.postMessage({
+            type: 'MEDIAPIPE_ERROR',
+            error: error.message
+          }, '*');
+        }
+      }
+
+      if (type === 'PROCESS_FRAME') {
+        if (hands && data.imageData) {
+          const img = new Image();
+          img.onload = async () => {
+            await hands.send({ image: img });
+          };
+          img.src = data.imageData;
+        }
+      }
+
+      if (type === 'STOP') {
+        if (hands) {
+          hands.close();
+          hands = null;
+        }
+      }
+    });
+
+    // Notify parent that sandbox is ready
+    window.parent.postMessage({ type: 'SANDBOX_READY' }, '*');
+  </script>
+</body>
+</html>
