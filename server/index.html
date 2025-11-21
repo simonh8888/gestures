@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pose Saver</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        input { display: block; margin: 10px 0; padding: 5px; }
+        button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Save a New Pose</h2>
+    
+    <label>Name:</label> <input type="text" id="name" placeholder="e.g. Home Position">
+    <label>X:</label> <input type="number" id="x" placeholder="0.0">
+    <label>Y:</label> <input type="number" id="y" placeholder="0.0">
+    <label>Z:</label> <input type="number" id="z" placeholder="0.0">
+
+    <button onclick="savePose()">Save Pose</button>
+
+    <script>
+        async function savePose() {
+            const data = {
+                name: document.getElementById('name').value,
+                x: document.getElementById('x').value,
+                y: document.getElementById('y').value,
+                z: document.getElementById('z').value
+            };
+
+            try {
+                const response = await fetch('http://localhost:3000/save-pose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if(response.ok) {
+                    alert('Pose Saved to MongoDB!');
+                } else {
+                    alert('Error saving pose.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Server not running?');
+            }
+        }
+    </script>
+</body>
+</html>

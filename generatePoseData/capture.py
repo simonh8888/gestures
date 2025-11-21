@@ -35,6 +35,16 @@ else:
 # Current pose label
 current_pose = "pointy finger tap"
 
+def list_available_cameras(max_index=10):
+    available_cams = []
+    for i in range(max_index):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            available_cams.append(i)
+            cap.release()
+    print("cameras" + available_cams)
+list_available_cameras(10)
+
 # Initialize webcam
 cap = cv2.VideoCapture(0)
 
@@ -85,6 +95,7 @@ with mp_hands.Hands(
 
         # Capture pose when 'c' is pressed
         if key == ord('c') and results.multi_hand_landmarks:
+            gesture_count += 1
             hand = results.multi_hand_landmarks[0]  # Take the first hand
             landmarks = [pose_id]  # Start with pose_id
             for lm in hand.landmark:
