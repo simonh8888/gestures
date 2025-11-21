@@ -67,7 +67,8 @@ with mp_hands.Hands(
             hand = results.multi_hand_landmarks[0]  # Take the first hand
             landmarks = []
             for lm in hand.landmark:
-                landmarks += [lm.x, lm.y, lm.z]  # Append x, y, z
+                # Format numbers to avoid scientific notation
+                landmarks += [f"{lm.x:.10f}", f"{lm.y:.10f}", f"{lm.z:.10f}"]
             with open(CSV_FILE, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(landmarks)
