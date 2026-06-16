@@ -9,7 +9,7 @@ mp_drawing = mp.solutions.drawing_utils
 mp_styles = mp.solutions.drawing_styles
 
 # File to store captured poses
-CSV_FILE = "hand_landmarks.csv"
+CSV_FILE = os.path.join(os.path.dirname(__file__), "data", "hand_landmarks.csv")
 
 # Track pose ID (will be updated based on existing data)
 pose_id = 0

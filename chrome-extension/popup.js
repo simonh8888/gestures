@@ -10,9 +10,15 @@ function runInActiveTab(code) {
   });
 }
 
-// Open camera view in new tab
+// Open camera view as a popup window
 document.getElementById("openCamera").addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("camera.html") });
+  chrome.windows.create({
+    url: chrome.runtime.getURL("camera.html"),
+    type: "popup",
+    width: 480,
+    height: 400,
+    focused: true
+  });
 });
 
 // Scroll Up
