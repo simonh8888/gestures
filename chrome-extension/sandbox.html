@@ -7,9 +7,9 @@
   <video id="video" style="display:none;" autoplay playsinline></video>
   <canvas id="canvas" style="display:none;"></canvas>
 
-  <script src="lib/hands.js"></script>
-  <script src="lib/camera_utils.js"></script>
-  <script src="lib/drawing_utils.js"></script>
+  <script src="assets/lib/hands.js"></script>
+  <script src="assets/lib/camera_utils.js"></script>
+  <script src="assets/lib/drawing_utils.js"></script>
 
   <script>
     const video = document.getElementById('video');
@@ -27,7 +27,7 @@
           // Initialize MediaPipe Hands
           hands = new Hands({
             locateFile: (file) => {
-              return `lib/${file}`;
+              return `assets/lib/${file}`;
             }
           });
 

@@ -1,3 +1,4 @@
 venv
 backend-server/node_modules
 python-tracker/models/
+node_modules

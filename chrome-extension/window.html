@@ -7,51 +7,49 @@
         font-family: sans-serif;
         text-align: center;
         margin: 0;
-        padding: 20px;
+        padding: 12px;
         background-color: #1a1a1a;
         color: white;
-        min-height: 100vh;
+        width: 320px;
       }
       h1 {
-        font-size: 22px;
-        margin-bottom: 20px;
+        font-size: 18px;
+        margin-bottom: 10px;
       }
       #videoContainer {
         position: relative;
         width: 100%;
-        max-width: 400px;
-        margin: 0 auto 20px;
-      }
-      #videoContainer {
-        position: relative;
-        width: 100%;
-        max-width: 400px;
-        margin: 0 auto 20px;
+        margin: 0 auto 10px;
       }
       #video {
         width: 100%;
-        height: 300px;
+        aspect-ratio: 4/3;
         background-color: #000;
         border-radius: 8px;
+        display: block;
       }
       #canvas {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
-        height: 300px;
+        height: 100%;
         pointer-events: none;
       }
       .button-container {
-        max-width: 400px;
-        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .button-container #status {
+        grid-column: 1 / -1;
       }
       button {
         display: block;
         width: 100%;
-        margin: 10px 0;
-        padding: 12px;
-        font-size: 15px;
+        margin: 0;
+        padding: 10px;
+        font-size: 14px;
         color: white;
         border: none;
         border-radius: 6px;
@@ -81,12 +79,11 @@
         background-color: #0056b3;
       }
       #status {
-        margin: 15px auto;
-        padding: 12px;
+        margin: 0;
+        padding: 10px;
         background-color: #2a2a2a;
         border-radius: 6px;
-        font-size: 14px;
-        max-width: 400px;
+        font-size: 13px;
       }
     </style>
   </head>
@@ -101,14 +98,10 @@
       <button id="activateCamera">Activate Camera</button>
       <button id="stopCamera">Stop Camera</button>
       <div id="status">Click to start</div>
-      <button id="scrollUp">⬆️ Scroll Up</button>
-      <button id="scrollDown">⬇️ Scroll Down</button>
+      <button id="scrollUp">Scroll Up</button>
+      <button id="scrollDown">Scroll Down</button>
     </div>
 
-    <!-- MediaPipe Hands (Local) -->
-    <script src="lib/camera_utils.js"></script>
-    <script src="lib/drawing_utils.js"></script>
-    <script src="lib/hands.js"></script>
     <script src="window.js"></script>
   </body>
 </html>
