@@ -11,12 +11,19 @@ let sandboxReady = false;
 let mediapipeReady = false;
 let processingFrame = false;
 
+const SCROLL_COOLDOWN_MS = 600;
+const CLOSE_TAB_HOLD_MS = 5000;
+let lastScrollTime = 0;
+let twoHandsFirstSeen = null;
+
+
 // Helper to run code in the active tab
 function runInActiveTab(code) {
-  chrome.tabs.query({ active: true }, (tabs) => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const browserTab = tabs.find(tab =>
       !tab.url.startsWith('chrome-extension://') &&
       !tab.url.startsWith('chrome://') &&
+      !tab.url.startsWith('edge://') &&
       tab.active
     );
 
@@ -60,6 +67,54 @@ window.addEventListener('message', (event) => {
   }
 });
 
+// Detect gestures and trigger tab actions
+function detectGestures(multiHandLandmarks) {
+  const now = Date.now();
+  const handCount = multiHandLandmarks.length;
+
+  // Two hands → must be held for 5 seconds before closing the tab
+  if (handCount >= 2) {
+    if (twoHandsFirstSeen === null) twoHandsFirstSeen = now;
+    const heldMs = now - twoHandsFirstSeen;
+    const remaining = Math.ceil((CLOSE_TAB_HOLD_MS - heldMs) / 1000);
+    if (heldMs >= CLOSE_TAB_HOLD_MS) {
+      twoHandsFirstSeen = null;
+      statusDiv.textContent = "Closing tab!";
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const browserTab = tabs.find(tab =>
+          !tab.url.startsWith('chrome-extension://') &&
+          !tab.url.startsWith('chrome://') &&
+          !tab.url.startsWith('edge://')
+        );
+        if (browserTab) chrome.tabs.remove(browserTab.id);
+      });
+    } else {
+      statusDiv.textContent = `Both hands held — closing in ${remaining}s`;
+    }
+    return;
+  }
+
+  // Reset the hold timer if hands drop below 2
+  twoHandsFirstSeen = null;
+
+  // One hand → check majority position for scroll
+  if (handCount === 1 && now - lastScrollTime > SCROLL_COOLDOWN_MS) {
+    const landmarks = multiHandLandmarks[0];
+    const bottomCount = landmarks.filter(lm => lm.y > 0.5).length;
+    const topCount = landmarks.length - bottomCount;
+
+    if (bottomCount > topCount) {
+      lastScrollTime = now;
+      statusDiv.textContent = "Hand in bottom half — scrolling down";
+      runInActiveTab(() => window.scrollBy({ top: 300, behavior: 'smooth' }));
+    } else if (topCount > bottomCount) {
+      lastScrollTime = now;
+      statusDiv.textContent = "Hand in top half — scrolling up";
+      runInActiveTab(() => window.scrollBy({ top: -300, behavior: 'smooth' }));
+    }
+  }
+}
+
 // Draw hand landmarks
 function drawResults(results) {
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -98,7 +153,7 @@ function drawResults(results) {
       }
     }
 
-    statusDiv.textContent = `Hand detected: ${results.multiHandLandmarks.length} hand(s)`;
+    detectGestures(results.multiHandLandmarks);
   } else {
     statusDiv.textContent = "No hands detected";
   }
@@ -179,8 +234,8 @@ activateButton.addEventListener("click", async () => {
     sandbox.contentWindow.postMessage({ type: 'INIT_MEDIAPIPE' }, '*');
 
   } catch (error) {
-    statusDiv.textContent = `Error: ${error.message}`;
-    console.error("Camera access error:", error);
+    statusDiv.textContent = `Error: ${error.name} — ${error.message}`;
+    console.error("Camera access error:", error.name, error.message);
   }
 });
 

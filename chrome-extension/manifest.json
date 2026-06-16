@@ -1,17 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "Gesture Control",
-  "version": "1.2",
-  "description": "Control Chrome with hand gestures via webcam.",
-  "permissions": ["scripting", "activeTab", "tabs", "alarms", "sidePanel"],
-  "host_permissions": ["http://localhost/*"],
+  "name": "Gestures",
+  "version": "1.0",
+  "description": "Chrome extension for recognizing hand gestures using camera.",
+  "permissions": ["scripting", "activeTab", "tabs"],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'self';"
+  },
+  "sandbox": {
+    "pages": ["sandbox.html"]
+  },
   "background": {
     "service_worker": "background.js"
   },
-  "side_panel": {
-    "default_path": "sidepanel.html"
-  },
   "action": {
+    "default_popup": "window.html",
     "default_icon": {
       "16": "assets/icon-192.png",
       "48": "assets/icon-192.png",
@@ -22,5 +30,9 @@
     "16": "assets/icon-192.png",
     "48": "assets/icon-192.png",
     "128": "assets/icon-192.png"
-  }
+  },
+  "web_accessible_resources": [{
+    "resources": ["assets/lib/*"],
+    "matches": ["<all_urls>"]
+  }]
 }

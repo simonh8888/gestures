@@ -99,6 +99,7 @@ function broadcastToExtension(payload) {
 
 trackingWss.on('connection', (ws) => {
   console.log('[tracking] CV script connected');
+  broadcastToExtension({ tracker: true });
 
   ws.on('message', (raw) => {
     let payload;
@@ -116,7 +117,10 @@ trackingWss.on('connection', (ws) => {
     if (action) broadcastToExtension({ action });
   });
 
-  ws.on('close', () => console.log('[tracking] CV script disconnected'));
+  ws.on('close', () => {
+    console.log('[tracking] CV script disconnected');
+    broadcastToExtension({ tracker: false });
+  });
   ws.on('error', (err) => console.error('[tracking] error:', err));
 });
 

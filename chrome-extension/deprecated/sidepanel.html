@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gesture Control</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: sans-serif;
+      background: #1a1a1a;
+      color: #eee;
+      padding: 16px;
+      min-width: 220px;
+    }
+
+    h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 16px;
+      letter-spacing: 0.3px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 12px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #555;
+      transition: background 0.3s;
+    }
+
+    .dot.connected    { background: #4caf50; }
+    .dot.disconnected { background: #f44336; }
+
+    #gesture-box {
+      margin-top: 20px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+    }
+
+    #gesture-label {
+      font-size: 22px;
+      font-weight: 700;
+      color: #4caf50;
+      min-height: 32px;
+      letter-spacing: 0.5px;
+      transition: opacity 0.2s;
+    }
+
+    #gesture-label.hidden { opacity: 0; }
+
+    #gesture-hint {
+      font-size: 11px;
+      color: #555;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Gesture Control</h2>
+
+  <div class="status-row">
+    <div class="dot" id="server-dot"></div>
+    <span id="server-status">Waiting for server...</span>
+  </div>
+
+  <div class="status-row">
+    <div class="dot" id="tracker-dot"></div>
+    <span id="tracker-status">Tracker not connected</span>
+  </div>
+
+  <div id="gesture-box">
+    <div id="gesture-label" class="hidden">—</div>
+    <div id="gesture-hint">No gesture detected</div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
