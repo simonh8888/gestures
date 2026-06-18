@@ -93,7 +93,7 @@ with mp_hands.Hands(
             with open(CSV_FILE, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(landmarks)
-            print(f"✅ Captured pose '{current_pose}' (ID: {pose_id}) — saved {len(landmarks)-2} values to {CSV_FILE}")
+            print(f"Captured pose '{current_pose}' (ID: {pose_id}) — saved {len(landmarks)-2} values to {CSV_FILE}")
             pose_id += 1
 
         # Quit with 'q'
