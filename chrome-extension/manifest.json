@@ -3,7 +3,7 @@
   "name": "Gestures",
   "version": "1.0",
   "description": "Chrome extension for recognizing hand gestures using camera.",
-  "permissions": ["scripting", "activeTab", "tabs"],
+  "permissions": ["scripting", "activeTab", "tabs", "storage"],
   "host_permissions": [
     "http://*/*",
     "https://*/*"

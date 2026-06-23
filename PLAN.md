@@ -33,13 +33,20 @@ for storage. Matching runs in the browser.
 {
   name:       "peace sign",
   type:       "static",          // "static" | "motion"  (discriminator)
-  action:     "scroll_up",       // scroll_up | scroll_down | close_tab | ...
-  landmarks:  [[x,y,z], ...],    // 21 normalized points (static gestures)
+  action:     "scroll_up",       // ENUM - key into the action registry (validated)
+  landmarks:  [[x,y,z], ...],    // 21 RAW points (not normalized) - see below
   frames:     null,              // [[...21...], ...] sequence (motion, reserved)
-  handedness: "Any",             // "Left" | "Right" | "Any"
-  threshold:  0.15               // per-gesture match tolerance
+  handedness: "Left",            // "Left" | "Right" - which hand captured it
+  threshold:  1.7                // per-gesture match tolerance (validated by replay)
 }
 ```
+
+**Store RAW landmarks, not normalized vectors.** Normalization (recenter, scale,
+handedness mirror) is re-applied on load. Reason: storing the normalized output
+locks the data to today's `normalizeLandmarks` - we've already changed it once
+(handedness) and may again (rotation). Raw data outlives the algorithm; the
+recompute cost on load is negligible. (Analogy: keep the photo, not the filtered
+thumbnail.) `handedness` is stored so the mirror-normalization can be re-applied.
 
 ## Key decisions
 
@@ -50,6 +57,20 @@ for storage. Matching runs in the browser.
 - The current hardcoded gestures (1 hand top/bottom → scroll; 2 hands held 5s →
   close tab) become the **seed defaults** loaded into MongoDB on first run.
 - Matching lives in `window.js` (it already receives the landmarks).
+- **Custom gestures, predefined actions.** Users define the *gesture* (the pose -
+  just captured data, easy to create on the spot) but assign it an *action* from
+  a fixed, growable menu - they do NOT author actions. Reason: an action is
+  *code* that runs in the browser; letting users invent arbitrary actions means a
+  scripting interface (huge scope) and runs user code (unsafe). The browser's API
+  surface is finite anyway. This mirrors how trackpad/mouse-gesture tools work:
+  pick a trigger, assign from a dropdown. Consequences:
+  - `action` is a **key into an action registry**, not arbitrary code. Mongoose
+    validates it with an enum so a gesture can't point at a nonexistent action.
+  - The registry lives in the extension (the `runAction` dispatcher). Adding a
+    new action = a few lines there; it appears in the recording UI automatically.
+  - Phase 3 recording UI is just: capture pose → pick action from dropdown.
+  - Starter actions: scroll_up, scroll_down, new_tab, close_tab, next_tab,
+    prev_tab, back, forward, refresh, zoom_in, zoom_out.
 
 ## Matching engine (the core technical work)
 
@@ -60,6 +81,46 @@ for storage. Matching runs in the browser.
    the 63-dim vector; pick the closest under its `threshold`.
 3. **Debounce**: require the same match for N consecutive frames + a cooldown,
    so one held pose fires the action once, not ~30×/sec.
+
+## Distribution strategy — "design for distribution, deploy locally"
+
+Goal: end up cloud-deployable (Docker/k8s, multi-user) for the systems
+experience, without over-engineering before the feature works.
+
+**Rule: decide distribution-aware for anything baked into the data model or the
+shape of the code; defer anything that's a separate layer added on top.**
+Sorted by retrofit cost, not by "local vs distributed":
+
+Expensive to retrofit → **decide now**
+- Schema shape (e.g. `owner` field) — adding it later means migrating every doc
+  and rewriting every query.
+- Auth boundaries / per-user query scoping — touches every endpoint; a missed
+  scope leaks data between users.
+- Statelessness — done (removed the in-memory WebSocket relay).
+- Config externalization — done (`MONGO_URI` / `PORT` from env).
+
+Cheap to retrofit → **defer** (additive layers, ~zero rework)
+- Dockerfile, docker-compose, k8s manifests, CI/CD, TLS/Ingress, hosting choice,
+  local Mongo → Atlas (just a different `MONGO_URI`).
+
+Process:
+1. Bake in load-bearing decisions now (the `owner` placeholder; statelessness +
+   env config already done).
+2. Build & finish features **locally** (single user, `localhost` URLs).
+3. Add infra as **discrete milestones afterward** — better for learning too
+   (containerize a *working* app, not a half-built one).
+
+**Infra milestones (added independently, after the feature works):**
+1. Dockerfile for the server (ready now — config is env-driven).
+2. docker-compose: server + MongoDB + named volume (highest-value exercise).
+3. `.env` / `.env.example` + `dotenv` for local convenience.
+4. Managed/StatefulSet MongoDB (Atlas free tier, or k8s later).
+5. Auth (JWT + user model) — turns the `owner` placeholder into enforced scoping.
+6. Kubernetes: Deployment (stateless replicas), Service, Ingress+TLS,
+   ConfigMap/Secret for `MONGO_URI`, probes hit `GET /health`.
+7. CI/CD: build image → push → deploy.
+
+**Interleaving:** Phase 2 + Docker(1,2) · Phase 3 + Auth(5) · Phase 4 + scale(4,6,7).
 
 ## Phases & status
 
@@ -103,12 +164,30 @@ negatives through `matcher.replay.js`. Findings:
 The `window.dumpLandmarks()` dev hook in `window.js` should be stripped or gated
 before any production build.
 
-### Phase 2 — Server as gesture store  ⬜ not started
-- [ ] Extend Mongo schema: `type`, `frames`, `handedness`, `threshold`
-- [ ] Add `PUT /gestures/:name` for edits (GET/POST/DELETE already exist)
-- [ ] Seed default gestures on first run
-- [ ] Extension fetches `GET /gestures` on startup, caches to `chrome.storage.local`
-- [ ] Matcher uses fetched templates instead of hardcoded rules
+### Phase 2 — Server as gesture store  ✅ done
+- [x] Extend Mongo schema: `type`, `frames`, `handedness`, `threshold` + `action`
+      validated against the `ACTIONS` registry enum; `owner` placeholder (default
+      "local") + compound unique index `{owner, name}` for future multi-user
+- [x] Add `PUT /gestures/:name` for edits (GET/POST/DELETE already exist)
+- [x] Seed default gestures on first run (idempotent; `seeds/defaultGestures.json`
+      derived from the validated template fixtures - raw landmarks)
+- [x] `GET /actions` exposes the action registry; `GET /health` for probes
+- [x] Server made stateless + config-externalized (`MONGO_URI`/`PORT` env, dead
+      WebSocket relay removed) - distribution prep
+- [x] Sandbox forwards `multiHandedness`; extension canonicalizes hands on load
+- [x] `gestureStore.js`: fetches `GET /gestures`, caches raw docs to
+      `chrome.storage.local` (offline fallback), normalizes-on-load into matcher
+      templates. API base URL is storage-configurable (localhost default).
+- [x] `window.js` matches custom templates first, falls back to hardcoded
+      built-ins; `runAction` implements the full action registry (tabs, nav, zoom)
+- Verified end-to-end (server -> fetch -> normalize -> match): right-hand samples
+  match left-hand seeded templates via handedness canonicalization.
+
+**Live-test caveat:** seeded gestures' `handedness` was hand-labeled by the user.
+MediaPipe's live `multiHandedness` label can differ (selfie/mirror). If a custom
+gesture won't match live, check the stored handedness matches MediaPipe's label
+for that hand. Phase 3 capture will record MediaPipe's label directly, removing
+the ambiguity.
 
 ### Phase 3 — Recording UI  ⬜ not started
 - [ ] "Record gesture" — capture current normalized pose
