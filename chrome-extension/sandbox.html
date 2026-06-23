@@ -39,11 +39,14 @@
           });
 
           hands.onResults((results) => {
-            // Send results back to parent
+            // Send results back to parent. multiHandedness (Left/Right per hand)
+            // is forwarded so the matcher can canonicalize hands - reduced to
+            // plain label strings (postMessage struct-clones the payload).
             window.parent.postMessage({
               type: 'MEDIAPIPE_RESULTS',
               results: {
-                multiHandLandmarks: results.multiHandLandmarks
+                multiHandLandmarks: results.multiHandLandmarks,
+                multiHandedness: (results.multiHandedness || []).map(h => h.label)
               }
             }, '*');
           });

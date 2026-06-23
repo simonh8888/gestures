@@ -15,9 +15,18 @@ const CLOSE_TAB_HOLD_MS = 5000;
 let twoHandsFirstSeen = null;
 
 // --- Built-in (hardcoded) gestures -------------------------------------------
-// These ship by default and don't need to be captured. The matching engine in
-// matcher.js stays available for user-defined custom gestures later (Phase 3).
+// These ship by default and don't need to be captured. Custom gestures fetched
+// from the server are matched via matcher.js (matched in detectGestures below).
 const debouncer = new Matcher.GestureDebouncer({ holdFrames: 4, cooldownMs: 600 });
+
+// Custom gesture templates loaded from the server (normalized, ready to match).
+let customTemplates = [];
+async function loadCustomGestures() {
+  const { source, templates, error } = await window.GestureStore.loadGestures();
+  customTemplates = templates;
+  console.log(`Loaded ${templates.length} custom gestures (${source})`, error || "");
+}
+loadCustomGestures();
 
 // --- Dev hook: capture real landmarks for offline matcher testing -----------
 // Open the popup's DevTools console (right-click the popup -> Inspect), strike a
@@ -84,7 +93,32 @@ function hasTwoSeparateHands(multiHandLandmarks) {
   return dist2d(a, b) > TWO_HAND_MIN_SEPARATION;
 }
 
-// Perform the action a gesture is labeled with.
+// Run `fn(tab)` with the active *browser* tab (not the extension's own page).
+function withActiveBrowserTab(fn) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs.find(t =>
+      t.url &&
+      !t.url.startsWith('chrome-extension://') &&
+      !t.url.startsWith('chrome://') &&
+      !t.url.startsWith('edge://')
+    );
+    if (tab) fn(tab);
+    else statusDiv.textContent = "No browser tab found to control";
+  });
+}
+
+// Switch the active tab by an offset (+1 next, -1 prev), wrapping around.
+function switchTab(delta) {
+  chrome.tabs.query({ currentWindow: true }, (tabs) => {
+    if (!tabs.length) return;
+    const i = tabs.findIndex(t => t.active);
+    const next = tabs[(i + delta + tabs.length) % tabs.length];
+    chrome.tabs.update(next.id, { active: true });
+  });
+}
+
+// Perform the action a gesture is labeled with. This is the action registry's
+// dispatcher - it must stay in sync with the server's ACTIONS list.
 function runAction(action) {
   switch (action) {
     case "scroll_up":
@@ -92,6 +126,19 @@ function runAction(action) {
       break;
     case "scroll_down":
       runInActiveTab(() => window.scrollBy({ top: 300, behavior: "smooth" }));
+      break;
+    case "new_tab":   chrome.tabs.create({}); break;
+    case "close_tab": withActiveBrowserTab(tab => chrome.tabs.remove(tab.id)); break;
+    case "next_tab":  switchTab(1); break;
+    case "prev_tab":  switchTab(-1); break;
+    case "back":      runInActiveTab(() => history.back()); break;
+    case "forward":   runInActiveTab(() => history.forward()); break;
+    case "refresh":   withActiveBrowserTab(tab => chrome.tabs.reload(tab.id)); break;
+    case "zoom_in":
+      withActiveBrowserTab(tab => chrome.tabs.getZoom(tab.id, z => chrome.tabs.setZoom(tab.id, z + 0.1)));
+      break;
+    case "zoom_out":
+      withActiveBrowserTab(tab => chrome.tabs.getZoom(tab.id, z => chrome.tabs.setZoom(tab.id, Math.max(0.3, z - 0.1))));
       break;
     default:
       console.warn("Unknown action:", action);
@@ -150,7 +197,7 @@ window.addEventListener('message', (event) => {
 });
 
 // Detect gestures and trigger tab actions
-function detectGestures(multiHandLandmarks) {
+function detectGestures(multiHandLandmarks, multiHandedness) {
   const now = Date.now();
 
   // Two separated hands -> must be held for 5 seconds before closing the tab.
@@ -179,21 +226,27 @@ function detectGestures(multiHandLandmarks) {
   // Reset the hold timer if we no longer see two separate hands.
   twoHandsFirstSeen = null;
 
-  // One hand -> hardcoded pointing detection, debounced.
+  // One hand -> custom gestures (from server) first, then hardcoded built-ins.
   if (multiHandLandmarks.length >= 1) {
     const landmarks = multiHandLandmarks[0];
+    const handedness = multiHandedness && multiHandedness[0]; // "Left"|"Right"|undefined
     lastRawLandmarks = landmarks; // dev hook: snapshot for window.dumpLandmarks()
-    const dir = detectPointing(landmarks); // "point_up" | "point_down" | null
-    const match = dir
-      ? { name: dir, action: dir === "point_up" ? "scroll_up" : "scroll_down" }
-      : null;
+
+    let match = null;
+    // Custom gestures take priority - they're the user's explicit definitions.
+    if (customTemplates.length) {
+      const m = Matcher.matchGesture(landmarks, customTemplates, handedness);
+      if (m) match = { name: m.name, action: m.action };
+    }
+    // Fall back to the built-in pointing gestures.
+    if (!match) {
+      const dir = detectPointing(landmarks);
+      if (dir) match = { name: dir, action: dir === "point_up" ? "scroll_up" : "scroll_down" };
+    }
 
     const fired = debouncer.update(match, now);
     if (fired) {
-      statusDiv.textContent =
-        fired.name === "point_up"
-          ? "Pointing up - scrolling up"
-          : "Pointing down - scrolling down";
+      statusDiv.textContent = `${fired.name} -> ${fired.action}`;
       runAction(fired.action);
     }
   } else {
@@ -239,7 +292,7 @@ function drawResults(results) {
       }
     }
 
-    detectGestures(results.multiHandLandmarks);
+    detectGestures(results.multiHandLandmarks, results.multiHandedness);
   } else {
     statusDiv.textContent = "No hands detected";
   }
