@@ -80,20 +80,29 @@
   //
   // templates: [{ name, action, landmarks: <63-num array>, threshold }]
   //   (template.landmarks must already be normalized with its own handedness.)
-  // handedness: optional "Left" | "Right" for the live hand, so it canonicalizes
-  //   to the same frame as the stored templates.
+  // handedness: optional "Left" | "Right" from MediaPipe (may be wrong on selfie
+  //   cameras — the label often reflects camera perspective, not physical hand).
+  //   Both chiralities are tried; nearest under threshold wins.
   // Returns { name, action, distance } or null if nothing qualifies.
   // ---------------------------------------------------------------------------
   function matchGesture(rawLandmarks, templates, handedness) {
-    const live = normalizeLandmarks(rawLandmarks, handedness);
-    if (!live) return null;
+    // Prefer the reported label first so ties break consistently; always try both
+    // because a mislabeled hand otherwise lands ~3x over threshold (see PLAN.md).
+    const chirality =
+      handedness === "Left" ? ["Left", "Right"]
+      : handedness === "Right" ? ["Right", "Left"]
+      : ["Left", "Right"];
 
     let best = null;
-    for (const t of templates) {
-      const dist = gestureDistance(live, t.landmarks);
-      const tol = t.threshold != null ? t.threshold : 1.7;
-      if (dist <= tol && (best === null || dist < best.distance)) {
-        best = { name: t.name, action: t.action, distance: dist };
+    for (const h of chirality) {
+      const live = normalizeLandmarks(rawLandmarks, h);
+      if (!live) continue;
+      for (const t of templates) {
+        const dist = gestureDistance(live, t.landmarks);
+        const tol = t.threshold != null ? t.threshold : 1.7;
+        if (dist <= tol && (best === null || dist < best.distance)) {
+          best = { name: t.name, action: t.action, distance: dist };
+        }
       }
     }
     return best;

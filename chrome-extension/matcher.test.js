@@ -122,6 +122,19 @@ function makeHand({ ox = 0.5, oy = 0.5, scale = 1, dir = 1, curlIndex = false } 
   check(`curled-index -> no match (null)`, m3 === null);
 }
 
+// --- 3b. Selfie camera: MediaPipe label may disagree with physical hand ------
+{
+  const right = makeHand({ ox: 0.5, oy: 0.5 });
+  const left = right.map((p) => ({ x: 2 * 0.5 - p.x, y: p.y, z: p.z }));
+  const templates = [
+    { name: "ok", action: "new_tab", landmarks: M.normalizeLandmarks(left, "Left"), threshold: 0.5 },
+  ];
+  // Physical right hand, but MediaPipe reports "Left" (common on front cameras).
+  const m = M.matchGesture(right, templates, "Left");
+  console.log("matchGesture (mislabeled handedness):");
+  check(`wrong MediaPipe label still matches`, m && m.name === "ok");
+}
+
 // --- 4. Debouncer: holds N frames, fires once, respects cooldown ------------
 {
   const db = new M.GestureDebouncer({ holdFrames: 4, cooldownMs: 600 });
