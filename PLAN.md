@@ -68,7 +68,8 @@ thumbnail.) `handedness` is stored so the mirror-normalization can be re-applied
     validates it with an enum so a gesture can't point at a nonexistent action.
   - The registry lives in the extension (the `runAction` dispatcher). Adding a
     new action = a few lines there; it appears in the recording UI automatically.
-  - Phase 3 recording UI is just: capture pose → pick action from dropdown.
+  - Phase 3 recording UI: name gesture + pick action from dropdown → Record →
+    countdown → capture averaged raw pose.
   - Starter actions: scroll_up, scroll_down, new_tab, close_tab, next_tab,
     prev_tab, back, forward, refresh, zoom_in, zoom_out.
 
@@ -111,9 +112,9 @@ Process:
    (containerize a *working* app, not a half-built one).
 
 **Infra milestones (added independently, after the feature works):**
-1. Dockerfile for the server (ready now — config is env-driven).
-2. docker-compose: server + MongoDB + named volume (highest-value exercise).
-3. `.env` / `.env.example` + `dotenv` for local convenience.
+1. ⬜ Dockerfile for the server (ready now — config is env-driven). **← next**
+2. ⬜ docker-compose: server + MongoDB + named volume (highest-value exercise). **← next**
+3. ⬜ `.env` / `.env.example` + `dotenv` for local convenience.
 4. Managed/StatefulSet MongoDB (Atlas free tier, or k8s later).
 5. Auth (JWT + user model) — turns the `owner` placeholder into enforced scoping.
 6. Kubernetes: Deployment (stateless replicas), Service, Ingress+TLS,
@@ -135,10 +136,10 @@ Process:
 point_up => scroll_up; below => point_down => scroll_down. Two hands held 5s =>
 close_tab. These ship by default and need no setup.
 
-`matcher.js` (normalize + distance + match) is **built and ready but reserved for
-user-defined custom gestures** in Phase 3. Only `GestureDebouncer` is wired into
-the live path today. Capture/storage UI was removed - it returns in Phase 3 with
-proper design.
+`matcher.js` (normalize + distance + match) is **wired into the live path** for
+server-fetched custom gestures (Phase 2). Built-in pointing/two-hand gestures
+remain hardcoded in `window.js`. Recording UI to create new templates returns in
+Phase 3.
 
 **Validation (real-hand fixtures, `chrome-extension/fixtures/`):** replayed 4
 gestures (ok, phone, pinky_up + a deliberately-similar phone/pinky pair) plus
@@ -156,13 +157,12 @@ negatives through `matcher.replay.js`. Findings:
 - **Default threshold: ~1.7** (clears mirrored off-hand matches ~1.0-1.6, stays
   below negatives at 3.75). Per-gesture `threshold` field allows tighter tuning.
 
-**Tests:** `matcher.test.js` (14 synthetic unit checks incl. mirror-normalization),
-`matcher.replay.js` (real captured fixtures). Both green.
+**Tests:** `matcher.test.js` (15 synthetic unit checks incl. mirror-normalization
+and mislabeled-handedness), `matcher.replay.js` (real captured fixtures). Both
+green.
 
-**Phase 3 plumbing TODO (deferred):** the sandbox currently drops MediaPipe's
-`multiHandedness` - it must forward it so the live matcher can canonicalize.
-The `window.dumpLandmarks()` dev hook in `window.js` should be stripped or gated
-before any production build.
+**Phase 3 plumbing TODO (deferred):** `window.dumpLandmarks()` is gated behind
+`localStorage.gesturesDev = "1"` (remove gate before any production build).
 
 ### Phase 2 — Server as gesture store  ✅ done
 - [x] Extend Mongo schema: `type`, `frames`, `handedness`, `threshold` + `action`
@@ -180,19 +180,21 @@ before any production build.
       templates. API base URL is storage-configurable (localhost default).
 - [x] `window.js` matches custom templates first, falls back to hardcoded
       built-ins; `runAction` implements the full action registry (tabs, nav, zoom)
-- Verified end-to-end (server -> fetch -> normalize -> match): right-hand samples
-  match left-hand seeded templates via handedness canonicalization.
+- [x] Live verified in Windows Chrome (2026-06-24): ok sign → `new_tab`, phone →
+      `refresh`, pinky up → `back`; offline cache fallback confirmed
+- [x] `matchGesture` tries both Left and Right chirality (commit `dafb75e`) —
+      fixes selfie cameras where MediaPipe's label is camera-relative, not
+      physical-hand relative. Offline replay + fixture tests still green.
 
-**Live-test caveat:** seeded gestures' `handedness` was hand-labeled by the user.
-MediaPipe's live `multiHandedness` label can differ (selfie/mirror). If a custom
-gesture won't match live, check the stored handedness matches MediaPipe's label
-for that hand. Phase 3 capture will record MediaPipe's label directly, removing
-the ambiguity.
+**Handedness note:** seeded templates store a capture-time `handedness` label;
+live matching no longer depends on MediaPipe reporting the same label. Phase 3
+capture will still record MediaPipe's label on save for audit/re-normalization.
 
-### Phase 3 — Recording UI  ⬜ not started
-- [ ] "Record gesture" — capture current normalized pose
-- [ ] Name + assign action, `POST /gestures`
-- [ ] List / delete / edit saved gestures
+### Phase 3 — Recording UI  ✅ done
+- [x] Recording UI: name gesture + assign action, then countdown capture
+- [x] On capture: average **raw** landmarks over ~0.5s, record MediaPipe
+      `handedness`, `POST /gestures` with `[[x,y,z], ...]` (not normalized)
+- [x] List / delete / edit saved gestures (action edit + re-record)
 
 **Hands-free capture (decided):** the recording flow must not require a click
 *while posing* — your hand is in the pose, so it can't be on the mouse. Use a
@@ -215,12 +217,12 @@ rejected: keyboard still needs the free hand; voice adds mic permission + flakin
 - [ ] Temporal matching (e.g. DTW)
 - [ ] UI toggle for static vs motion when recording
 
-## Current state (2026-06-16)
+## Current state (2026-06-24)
 
-- ✅ Self-contained extension works: in-browser camera + MediaPipe + hardcoded
-  gestures + tab control. Committed (`8c81cc6`).
-- ✅ Project reorganized into `chrome-extension/`, `backend-server/`, `python-tracker/`.
-- ⚠️ `backend-server/server.js` + `python-tracker/tracker.py` exist but are
-  decoupled from the live extension (built during the earlier server-pipeline
-  approach, before the pivot to Path C).
-- ❌ No matching engine, no gesture storage wiring, no recording UI yet.
+- ✅ **Phase 1 done** — matcher engine, debounce, fixture replay (`9d3e1e8`).
+- ✅ **Phase 2 done** — gesture store server + extension wiring + live verified
+  (`498ace8`, handedness fix `dafb75e`).
+- ✅ **Phase 3 done** — recording UI (`gestureUI.js`, `recorder.js`, store CRUD).
+- ✅ Seeded custom gestures work live alongside hardcoded built-ins (scroll,
+  two-hand close-tab).
+- ⬜ **Infra milestones 1–2 next** — Dockerfile + docker-compose for backend.

@@ -3,6 +3,10 @@
   <head>
     <title>Hand Gesture Recognition</title>
     <style>
+      html, body {
+        height: 580px;
+        overflow: hidden;
+      }
       body {
         font-family: sans-serif;
         text-align: center;
@@ -11,10 +15,28 @@
         background-color: #1a1a1a;
         color: white;
         width: 320px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      #cameraSticky {
+        flex-shrink: 0;
+        z-index: 10;
+        background-color: #1a1a1a;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #333;
+      }
+      #scrollContent {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        text-align: left;
+        padding-top: 8px;
       }
       h1 {
-        font-size: 18px;
-        margin-bottom: 10px;
+        font-size: 16px;
+        margin: 0 0 8px;
       }
       #videoContainer {
         position: relative;
@@ -36,6 +58,23 @@
         height: 100%;
         pointer-events: none;
       }
+      #countdownOverlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 64px;
+        font-weight: bold;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.45);
+        border-radius: 8px;
+        pointer-events: none;
+        z-index: 2;
+      }
+      #countdownOverlay[hidden] {
+        display: none;
+      }
       .button-container {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -56,27 +95,25 @@
         cursor: pointer;
         transition: background-color 0.2s;
       }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
       #activateCamera {
         background-color: #4CAF50;
       }
-      #activateCamera:hover {
+      #activateCamera:hover:not(:disabled) {
         background-color: #45a049;
       }
       #stopCamera {
         background-color: #dc3545;
         display: none;
       }
-      #stopCamera:hover {
+      #stopCamera:hover:not(:disabled) {
         background-color: #c82333;
       }
       #stopCamera.active {
         display: block;
-      }
-      #scrollUp, #scrollDown {
-        background-color: #007bff;
-      }
-      #scrollUp:hover, #scrollDown:hover {
-        background-color: #0056b3;
       }
       #status {
         margin: 0;
@@ -85,25 +122,161 @@
         border-radius: 6px;
         font-size: 13px;
       }
+      #managePanel {
+        margin-top: 0;
+        text-align: left;
+      }
+      #managePanel summary {
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 6px 0;
+      }
+      .manage-inner {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #333;
+      }
+      .field {
+        margin-bottom: 8px;
+      }
+      .field label {
+        display: block;
+        font-size: 12px;
+        color: #aaa;
+        margin-bottom: 4px;
+      }
+      .field input, .field select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid #444;
+        background: #2a2a2a;
+        color: #fff;
+        font-size: 13px;
+      }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      #recordGesture {
+        background-color: #6f42c1;
+        grid-column: 1 / -1;
+      }
+      #recordGesture:hover:not(:disabled) {
+        background-color: #5a32a3;
+      }
+      #cancelRecord {
+        background-color: #6c757d;
+        grid-column: 1 / -1;
+      }
+      #saveAction {
+        background-color: #28a745;
+      }
+      #renameGesture {
+        background-color: #17a2b8;
+        grid-column: 1 / -1;
+      }
+      #reRecordGesture {
+        background-color: #6f42c1;
+      }
+      #cancelEdit {
+        background-color: #6c757d;
+      }
+      .form-message {
+        font-size: 12px;
+        min-height: 1.2em;
+        margin: 6px 0 0;
+        color: #8bc34a;
+      }
+      .form-message.error {
+        color: #ff6b6b;
+      }
+      #gestureList {
+        list-style: none;
+        padding: 0;
+        margin: 12px 0 0;
+      }
+      #gestureList .empty {
+        font-size: 12px;
+        color: #888;
+        text-align: center;
+        padding: 8px 0;
+      }
+      .gesture-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+        font-size: 12px;
+      }
+      .gesture-label {
+        color: #ddd;
+      }
+      .gesture-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 4px;
+      }
+      .gesture-actions button {
+        padding: 6px 4px;
+        font-size: 11px;
+      }
+      .btn-edit { background: #007bff; }
+      .btn-rerecord { background: #6f42c1; }
+      .btn-delete { background: #dc3545; }
     </style>
   </head>
   <body>
-    <h1>Hand Gesture Recognition</h1>
-    <div id="videoContainer">
-      <video id="video" autoplay playsinline></video>
-      <canvas id="canvas"></canvas>
-      <iframe id="sandbox" src="sandbox.html" style="display:none;"></iframe>
+    <div id="cameraSticky">
+      <h1>Hand Gesture Recognition</h1>
+      <div id="videoContainer">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="countdownOverlay" hidden>3</div>
+        <iframe id="sandbox" src="sandbox.html" style="display:none;"></iframe>
+      </div>
+      <div class="button-container">
+        <button id="activateCamera">Activate Camera</button>
+        <button id="stopCamera">Stop Camera</button>
+        <div id="status">Click to start</div>
+      </div>
     </div>
-    <div class="button-container">
-      <button id="activateCamera">Activate Camera</button>
-      <button id="stopCamera">Stop Camera</button>
-      <div id="status">Click to start</div>
-      <button id="scrollUp">Scroll Up</button>
-      <button id="scrollDown">Scroll Down</button>
+
+    <div id="scrollContent">
+    <details id="managePanel">
+      <summary>Manage gestures</summary>
+      <div class="manage-inner">
+        <div class="field">
+          <label for="gestureName">Gesture name</label>
+          <input id="gestureName" type="text" placeholder="e.g. peace sign" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="gestureAction">Action</label>
+          <select id="gestureAction"></select>
+        </div>
+        <p id="formMessage" class="form-message"></p>
+        <div class="form-row">
+          <button type="button" id="recordGesture">Record</button>
+          <button type="button" id="cancelRecord" hidden>Cancel recording</button>
+          <button type="button" id="saveAction" hidden>Save action</button>
+          <button type="button" id="renameGesture" hidden>Rename</button>
+          <button type="button" id="reRecordGesture" hidden>Re-record</button>
+          <button type="button" id="cancelEdit" hidden>Cancel edit</button>
+        </div>
+        <ul id="gestureList"></ul>
+      </div>
+    </details>
     </div>
 
     <script src="matcher.js"></script>
     <script src="gestureStore.js"></script>
+    <script src="recorder.js"></script>
+    <script src="gestureUI.js"></script>
     <script src="window.js"></script>
   </body>
 </html>

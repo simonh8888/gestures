@@ -16,6 +16,73 @@
   const WRIST = 0;
   const MIDDLE_MCP = 9; // base knuckle of the middle finger
 
+  // Finger extension: tip-to-wrist / pip-to-wrist ratio (>1 = extended).
+  const FINGERS = {
+    index: { tip: 8, pip: 6 },
+    middle: { tip: 12, pip: 10 },
+    ring: { tip: 16, pip: 14 },
+    pinky: { tip: 20, pip: 18 },
+  };
+  const EXTENDED_RATIO = 1.12; // clearly extended, not a knuckle twitch
+  const MIN_EXTENDED_STRENGTH = 0.78; // live extension vs template when both extended
+  const MIN_MATCH_MARGIN = 0.35; // best must beat second qualifying match by this much
+  const AUTO_THRESHOLD_MAX = 1.7;
+  const AUTO_THRESHOLD_MIN = 0.55;
+  const AUTO_THRESHOLD_FRACTION = 0.55;
+
+  function dist2d(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // Per-finger extension strength from raw landmarks (stored implicitly via raw
+  // pose; recomputed on load). Used to reject "almost" matches (e.g. peace sign
+  // when middle is barely raised during point up).
+  function computeFingerRatios(landmarks) {
+    if (!landmarks || landmarks.length < 21) return null;
+    const wrist = landmarks[WRIST];
+    const out = {};
+    for (const [name, idx] of Object.entries(FINGERS)) {
+      const tip = landmarks[idx.tip];
+      const pip = landmarks[idx.pip];
+      const tipD = dist2d(tip, wrist);
+      const pipD = dist2d(pip, wrist);
+      out[name] = pipD > 1e-6 ? tipD / pipD : 1;
+    }
+    return out;
+  }
+
+  function fingerRatiosCompatible(liveLandmarks, templateRatios) {
+    if (!templateRatios) return true;
+    const live = computeFingerRatios(liveLandmarks);
+    if (!live) return false;
+    for (const finger of Object.keys(FINGERS)) {
+      const tExt = templateRatios[finger] >= EXTENDED_RATIO;
+      const lExt = live[finger] >= EXTENDED_RATIO;
+      if (tExt !== lExt) return false;
+      if (tExt && live[finger] < templateRatios[finger] * MIN_EXTENDED_STRENGTH) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Set on save from distance to nearest other gesture — users never tune this.
+  function computeAutoThreshold(normalizedLandmarks, templates, excludeName) {
+    let nearest = Infinity;
+    for (const t of templates) {
+      if (excludeName && t.name === excludeName) continue;
+      const d = gestureDistance(normalizedLandmarks, t.landmarks);
+      if (d < nearest) nearest = d;
+    }
+    if (!isFinite(nearest)) return AUTO_THRESHOLD_MAX;
+    return Math.min(
+      AUTO_THRESHOLD_MAX,
+      Math.max(AUTO_THRESHOLD_MIN, nearest * AUTO_THRESHOLD_FRACTION)
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // 1. Normalization
   //
@@ -86,26 +153,37 @@
   // Returns { name, action, distance } or null if nothing qualifies.
   // ---------------------------------------------------------------------------
   function matchGesture(rawLandmarks, templates, handedness) {
-    // Prefer the reported label first so ties break consistently; always try both
-    // because a mislabeled hand otherwise lands ~3x over threshold (see PLAN.md).
     const chirality =
       handedness === "Left" ? ["Left", "Right"]
       : handedness === "Right" ? ["Right", "Left"]
       : ["Left", "Right"];
 
-    let best = null;
+    const candidates = [];
+
     for (const h of chirality) {
-      const live = normalizeLandmarks(rawLandmarks, h);
-      if (!live) continue;
+      const liveNorm = normalizeLandmarks(rawLandmarks, h);
+      if (!liveNorm) continue;
       for (const t of templates) {
-        const dist = gestureDistance(live, t.landmarks);
-        const tol = t.threshold != null ? t.threshold : 1.7;
-        if (dist <= tol && (best === null || dist < best.distance)) {
-          best = { name: t.name, action: t.action, distance: dist };
+        if (!fingerRatiosCompatible(rawLandmarks, t.fingerRatios)) continue;
+        const dist = gestureDistance(liveNorm, t.landmarks);
+        const tol = t.threshold != null ? t.threshold : AUTO_THRESHOLD_MAX;
+        if (dist <= tol) {
+          candidates.push({ name: t.name, action: t.action, distance: dist });
         }
       }
     }
-    return best;
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.distance - b.distance);
+
+    if (
+      candidates.length >= 2 &&
+      candidates[1].distance < candidates[0].distance + MIN_MATCH_MARGIN
+    ) {
+      return null;
+    }
+
+    return candidates[0];
   }
 
   // ---------------------------------------------------------------------------
@@ -155,6 +233,9 @@
   window.Matcher = {
     normalizeLandmarks,
     gestureDistance,
+    computeFingerRatios,
+    fingerRatiosCompatible,
+    computeAutoThreshold,
     matchGesture,
     GestureDebouncer,
     WRIST,

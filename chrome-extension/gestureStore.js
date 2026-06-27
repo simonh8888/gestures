@@ -29,6 +29,25 @@
     });
   }
 
+  async function apiFetch(path, options = {}) {
+    const base = await getApiBase();
+    const res = await fetch(`${base}${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    });
+    let body = null;
+    try {
+      body = await res.json();
+    } catch (_) {
+      body = null;
+    }
+    if (!res.ok) {
+      const msg = (body && body.error) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return body;
+  }
+
   // Convert a server gesture doc (RAW landmarks [[x,y,z]] + handedness) into a
   // matcher template (normalized 63-vector). Normalizing on load - rather than
   // storing normalized vectors - keeps stored data valid if normalize() changes.
@@ -42,28 +61,73 @@
       action: g.action,
       landmarks: Array.from(norm),
       threshold: g.threshold,
+      fingerRatios: window.Matcher.computeFingerRatios(points),
     };
   }
 
   // Fetch gestures from the server; on any failure fall back to the last cached
   // set so the extension still works offline / when the server is down.
   async function loadGestures() {
+    const { gestures, source, error } = await listGestures();
+    return {
+      source,
+      error,
+      templates: gestures.map(toTemplate).filter(Boolean),
+    };
+  }
+
+  async function listGestures() {
     const base = await getApiBase();
     try {
       const res = await fetch(`${base}/gestures`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const docs = await res.json();
-      chrome.storage.local.set({ [CACHE_KEY]: docs }); // cache raw docs
-      return { source: "server", templates: docs.map(toTemplate).filter(Boolean) };
+      chrome.storage.local.set({ [CACHE_KEY]: docs });
+      return { source: "server", gestures: docs };
     } catch (err) {
       const cached = await readCache();
       return {
         source: cached.length ? "cache" : "none",
-        templates: cached.map(toTemplate).filter(Boolean),
+        gestures: cached,
         error: err.message,
       };
     }
   }
 
-  window.GestureStore = { loadGestures, getApiBase };
+  async function fetchActions() {
+    return apiFetch("/actions");
+  }
+
+  async function createGesture(doc) {
+    const created = await apiFetch("/gestures", {
+      method: "POST",
+      body: JSON.stringify(doc),
+    });
+    await listGestures();
+    return created;
+  }
+
+  async function updateGesture(name, doc) {
+    const updated = await apiFetch(`/gestures/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(doc),
+    });
+    await listGestures();
+    return updated;
+  }
+
+  async function deleteGesture(name) {
+    await apiFetch(`/gestures/${encodeURIComponent(name)}`, { method: "DELETE" });
+    await listGestures();
+  }
+
+  window.GestureStore = {
+    loadGestures,
+    listGestures,
+    fetchActions,
+    createGesture,
+    updateGesture,
+    deleteGesture,
+    getApiBase,
+  };
 })();
