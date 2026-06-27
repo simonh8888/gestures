@@ -12,12 +12,17 @@ let mediapipeReady = false;
 let processingFrame = false;
 
 const CLOSE_TAB_HOLD_MS = 5000;
+const POST_RECORD_COOLDOWN_MS = 3000; // ignore matches after save while user releases pose
 let twoHandsFirstSeen = null;
+let gestureCooldownUntil = 0;
 
 // --- Built-in (hardcoded) gestures -------------------------------------------
 // These ship by default and don't need to be captured. Custom gestures fetched
 // from the server are matched via matcher.js (matched in detectGestures below).
-const debouncer = new Matcher.GestureDebouncer({ holdFrames: 4, cooldownMs: 600 });
+// Require ~0.7s of stable match before firing (~30fps). Short holds (4 frames)
+// fire on transitional poses while moving into a gesture.
+const GESTURE_HOLD_FRAMES = 20;
+const debouncer = new Matcher.GestureDebouncer({ holdFrames: GESTURE_HOLD_FRAMES, cooldownMs: 600 });
 
 // Custom gesture templates loaded from the server (normalized, ready to match).
 let customTemplates = [];
@@ -28,13 +33,25 @@ async function loadCustomGestures() {
 }
 loadCustomGestures();
 
-// --- Dev hook: capture real landmarks for offline matcher testing -----------
-// Open the popup's DevTools console (right-click the popup -> Inspect), strike a
-// pose, then run:  copy(JSON.stringify(window.dumpLandmarks()))
-// Paste into a file under chrome-extension/fixtures/ and replay with
-// matcher.replay.js. Holds the most recent single-hand raw landmarks.
+window.refreshGestures = async () => {
+  await loadCustomGestures();
+  if (window.GestureUI) await window.GestureUI.refreshList();
+};
+
+window.isCameraReady = () => Boolean(stream && mediapipeReady);
+
+window.startGestureCooldown = () => {
+  gestureCooldownUntil = Date.now() + POST_RECORD_COOLDOWN_MS;
+  debouncer.reset();
+  twoHandsFirstSeen = null;
+};
+
+// Dev hook (fixtures / matcher.replay.js). Set localStorage.gesturesDev = "1" in
+// the popup console to enable: copy(JSON.stringify(window.dumpLandmarks()))
 let lastRawLandmarks = null;
-window.dumpLandmarks = () => lastRawLandmarks;
+if (localStorage.getItem("gesturesDev") === "1") {
+  window.dumpLandmarks = () => lastRawLandmarks;
+}
 
 // MediaPipe Hands landmark indices.
 const WRIST = 0;
@@ -122,10 +139,8 @@ function switchTab(delta) {
 function runAction(action) {
   switch (action) {
     case "scroll_up":
-      runInActiveTab(() => window.scrollBy({ top: -300, behavior: "smooth" }));
-      break;
     case "scroll_down":
-      runInActiveTab(() => window.scrollBy({ top: 300, behavior: "smooth" }));
+      // Handled by continuous scroll while the gesture is held.
       break;
     case "new_tab":   chrome.tabs.create({}); break;
     case "close_tab": withActiveBrowserTab(tab => chrome.tabs.remove(tab.id)); break;
@@ -147,19 +162,24 @@ function runAction(action) {
 
 
 // Helper to run code in the active tab
-function runInActiveTab(code) {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const browserTab = tabs.find(tab =>
-      !tab.url.startsWith('chrome-extension://') &&
-      !tab.url.startsWith('chrome://') &&
-      !tab.url.startsWith('edge://') &&
-      tab.active
-    );
+function findActiveBrowserTab(tabs) {
+  return tabs.find(tab =>
+    tab.url &&
+    !tab.url.startsWith('chrome-extension://') &&
+    !tab.url.startsWith('chrome://') &&
+    !tab.url.startsWith('edge://') &&
+    tab.active
+  );
+}
 
+function runInActiveTab(code, args = []) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const browserTab = findActiveBrowserTab(tabs);
     if (browserTab) {
       chrome.scripting.executeScript({
         target: { tabId: browserTab.id },
-        func: code
+        func: code,
+        args,
       }).catch(err => {
         statusDiv.textContent = `Error: ${err.message}`;
       });
@@ -167,6 +187,41 @@ function runInActiveTab(code) {
       statusDiv.textContent = "No browser tab found to control";
     }
   });
+}
+
+// Continuous scroll while point up/down (or custom scroll gesture) is held.
+const SCROLL_INTERVAL_MS = 16;
+const SCROLL_PX_PER_TICK = 10;
+const SCROLL_START_FRAMES = 6; // brief hold before scroll starts (~200ms)
+let scrollTimer = null;
+let scrollDeltaPx = 0;
+let scrollMatchStreak = 0;
+
+function isScrollAction(action) {
+  return action === "scroll_up" || action === "scroll_down";
+}
+
+function scrollStepFor(action) {
+  return action === "scroll_up" ? -SCROLL_PX_PER_TICK : SCROLL_PX_PER_TICK;
+}
+
+function stopContinuousScroll() {
+  if (scrollTimer) {
+    clearInterval(scrollTimer);
+    scrollTimer = null;
+  }
+  scrollDeltaPx = 0;
+  scrollMatchStreak = 0;
+}
+
+function startContinuousScroll(action) {
+  const delta = scrollStepFor(action);
+  if (scrollTimer && scrollDeltaPx === delta) return;
+  stopContinuousScroll();
+  scrollDeltaPx = delta;
+  scrollTimer = setInterval(() => {
+    runInActiveTab((d) => window.scrollBy({ top: d, behavior: "auto" }), [scrollDeltaPx]);
+  }, SCROLL_INTERVAL_MS);
 }
 
 // Listen for messages from sandbox
@@ -198,11 +253,26 @@ window.addEventListener('message', (event) => {
 
 // Detect gestures and trigger tab actions
 function detectGestures(multiHandLandmarks, multiHandedness) {
+  if (window.GestureRecorder?.isActive()) {
+    stopContinuousScroll();
+    return;
+  }
+
   const now = Date.now();
+
+  if (now < gestureCooldownUntil) {
+    debouncer.reset();
+    twoHandsFirstSeen = null;
+    stopContinuousScroll();
+    const sec = Math.ceil((gestureCooldownUntil - now) / 1000);
+    statusDiv.textContent = `Cooldown ${sec}s — release your hand`;
+    return;
+  }
 
   // Two separated hands -> must be held for 5 seconds before closing the tab.
   // (A single hand misread as two overlapping detections won't qualify.)
   if (hasTwoSeparateHands(multiHandLandmarks)) {
+    stopContinuousScroll();
     if (twoHandsFirstSeen === null) twoHandsFirstSeen = now;
     const heldMs = now - twoHandsFirstSeen;
     const remaining = Math.ceil((CLOSE_TAB_HOLD_MS - heldMs) / 1000);
@@ -244,13 +314,25 @@ function detectGestures(multiHandLandmarks, multiHandedness) {
       if (dir) match = { name: dir, action: dir === "point_up" ? "scroll_up" : "scroll_down" };
     }
 
-    const fired = debouncer.update(match, now);
-    if (fired) {
-      statusDiv.textContent = `${fired.name} -> ${fired.action}`;
-      runAction(fired.action);
+    if (match && isScrollAction(match.action)) {
+      scrollMatchStreak++;
+      if (scrollMatchStreak >= SCROLL_START_FRAMES) {
+        startContinuousScroll(match.action);
+        statusDiv.textContent = `${match.name}: ${match.action}`;
+      }
+      debouncer.reset();
+    } else {
+      scrollMatchStreak = 0;
+      stopContinuousScroll();
+      const fired = debouncer.update(match, now);
+      if (fired) {
+        statusDiv.textContent = `${fired.name}: ${fired.action}`;
+        runAction(fired.action);
+      }
     }
   } else {
     debouncer.reset();
+    stopContinuousScroll();
   }
 }
 
@@ -293,7 +375,15 @@ function drawResults(results) {
     }
 
     detectGestures(results.multiHandLandmarks, results.multiHandedness);
-  } else {
+
+    if (window.GestureRecorder?.isActive() && results.multiHandLandmarks.length >= 1) {
+      window.GestureRecorder.pushFrame(
+        results.multiHandLandmarks[0],
+        results.multiHandedness && results.multiHandedness[0]
+      );
+    }
+  } else if (!window.GestureRecorder?.isActive()) {
+    stopContinuousScroll();
     statusDiv.textContent = "No hands detected";
   }
 }
@@ -380,6 +470,11 @@ activateButton.addEventListener("click", async () => {
 
 // Stop Camera button
 stopButton.addEventListener("click", () => {
+  stopContinuousScroll();
+  if (window.GestureRecorder?.isActive()) {
+    window.GestureRecorder.cancel();
+    document.getElementById("countdownOverlay").hidden = true;
+  }
   if (sandbox && mediapipeReady) {
     sandbox.contentWindow.postMessage({ type: 'STOP' }, '*');
   }
@@ -395,12 +490,4 @@ stopButton.addEventListener("click", () => {
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 });
 
-// Scroll Up
-document.getElementById("scrollUp").addEventListener("click", () => {
-  runInActiveTab(() => window.scrollBy(0, -500));
-});
-
-// Scroll Down
-document.getElementById("scrollDown").addEventListener("click", () => {
-  runInActiveTab(() => window.scrollBy(0, 500));
-});
+window.GestureUI.init();

@@ -26,21 +26,22 @@ function check(name, cond) {
 
 // Build a plausible 21-point hand. `dir` = +1 finger tips point up (smaller y),
 // -1 they point down. `curlIndex` curls the index finger (for a non-pointing pose).
-function makeHand({ ox = 0.5, oy = 0.5, scale = 1, dir = 1, curlIndex = false } = {}) {
+function makeHand({
+  ox = 0.5, oy = 0.5, scale = 1, dir = 1, curlIndex = false,
+  middleExtended = false, middleSlack = false,
+} = {}) {
   const P = (x, y, z = 0) => ({ x: ox + x * scale, y: oy - dir * y * scale, z });
+  const midTipY = middleExtended ? 0.50 : middleSlack ? 0.26 : 0.16;
+  const midPipY = middleSlack ? 0.24 : 0.30;
   return [
     P(0, 0),                         // 0 wrist
     P(-0.15, 0.05), P(-0.22, 0.12), P(-0.28, 0.18), P(-0.33, 0.24), // 1-4 thumb
-    // 5-8 index: extended (tip far from wrist) unless curled (tip folds back)
     P(0.0, 0.18),
     P(0.0, 0.34),
     curlIndex ? P(0.0, 0.30) : P(0.0, 0.50),
     curlIndex ? P(0.0, 0.20) : P(0.0, 0.66),
-    // 9-12 middle (curled: tip near mcp)
-    P(0.08, 0.18), P(0.08, 0.30), P(0.08, 0.24), P(0.08, 0.16),
-    // 13-16 ring (curled)
+    P(0.08, 0.18), P(0.08, midPipY), P(0.08, 0.24), P(0.08, midTipY),
     P(0.15, 0.17), P(0.15, 0.28), P(0.15, 0.22), P(0.15, 0.15),
-    // 17-20 pinky (curled)
     P(0.21, 0.15), P(0.21, 0.24), P(0.21, 0.19), P(0.21, 0.13),
   ];
 }
@@ -133,6 +134,41 @@ function makeHand({ ox = 0.5, oy = 0.5, scale = 1, dir = 1, curlIndex = false } 
   const m = M.matchGesture(right, templates, "Left");
   console.log("matchGesture (mislabeled handedness):");
   check(`wrong MediaPipe label still matches`, m && m.name === "ok");
+}
+
+// --- 3c. Finger extension guard blocks partial poses ------------------------
+{
+  const peaceHand = makeHand({ dir: 1, middleExtended: true });
+  const sloppyPoint = makeHand({ dir: 1, middleSlack: true });
+  const templates = [{
+    name: "peace",
+    action: "new_tab",
+    landmarks: Array.from(M.normalizeLandmarks(peaceHand)),
+    fingerRatios: M.computeFingerRatios(peaceHand),
+    threshold: 1.7,
+  }];
+  const blocked = M.matchGesture(sloppyPoint, templates);
+  const clear = M.matchGesture(peaceHand, templates);
+  console.log("Finger extension guard:");
+  check("sloppy point does not match peace sign", blocked === null);
+  check("clear peace sign still matches", clear && clear.name === "peace");
+}
+
+// --- 3d. Auto threshold from nearest neighbor ------------------------------
+{
+  const pointHand = makeHand({ dir: 1 });
+  const peaceHand = makeHand({ dir: 1, middleExtended: true });
+  const templates = [{
+    name: "peace",
+    landmarks: Array.from(M.normalizeLandmarks(peaceHand)),
+    threshold: 1.7,
+  }];
+  const normPoint = Array.from(M.normalizeLandmarks(pointHand));
+  const t = M.computeAutoThreshold(normPoint, templates, null);
+  const d = M.gestureDistance(normPoint, templates[0].landmarks);
+  console.log("Auto threshold:");
+  check(`auto threshold below neighbor distance (${t.toFixed(3)} < ${d.toFixed(3)})`, t < d && d > 0.5);
+  check(`auto threshold at least min 0.55`, t >= 0.55);
 }
 
 // --- 4. Debouncer: holds N frames, fires once, respects cooldown ------------
